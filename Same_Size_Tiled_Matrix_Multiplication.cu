@@ -26,8 +26,26 @@ __global__ void tileMatMul(float *A, float *B, float *C, int n)
     
     for(int tile_num = 0; tile_num < N/TILE_SIZE; tile_num++) //main algo
     {
-        shA[ty][tx] = A[(row * N) + (tile_num * TILE_SIZE + tx)]; //map global index to shared index
-        shB[ty][tx] = B[((tile_num * TILE_SIZE + ty) * N) + column]; 
+        if((row < N) && ((tile_num * TILE_SIZE + tx) < N)) //if thread doesnt load a value in shared mem
+        {
+            //map global index to shared index for matrix A
+            shA[ty][tx] = A[(row * N) + (tile_num * TILE_SIZE + tx)]; 
+        }
+        else
+        {
+            shA[ty][tx] = 0.0f;
+        }
+
+
+        if(((tile_num * TILE_SIZE + ty) < N) && (column < N))
+        {
+            //map global index to shared index for matrix B
+            shB[ty][tx] = B[((tile_num * TILE_SIZE + ty) * N) + column]; 
+        }
+        else
+        {
+            shB[ty][tx] = 0.0f;
+        }
         __syncthreads();
 
         for(int k = 0; k < TILE_SIZE; k++)
@@ -37,13 +55,15 @@ __global__ void tileMatMul(float *A, float *B, float *C, int n)
         __syncthreads();
     }  
     C[row * N + column] = sum;
+    
 }
 
 void gen_matrix(float *mat, int row, int column) //populates matrix with values
 {
     for(int i = 0; i < row * column; i++)
     { 
-        mat[i] = ((float)rand() / RAND_MAX); 
+        mat[i] = ((float)rand() / RAND_MAX);
+         
     }
 }
 
@@ -52,6 +72,7 @@ double get_time() {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
+
 
 int main()
 {
