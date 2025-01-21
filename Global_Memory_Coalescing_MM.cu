@@ -3,12 +3,13 @@
 #include <time.h>
 #include <cuda_runtime.h>
 
+#define CEIL_DIV(M, N) (((M) + (N)-1) / (N)) //needed for calculation of row and column index
 #define M 256  // Number of rows in A and C
 #define K 512  // Number of columns in A and rows in B
 #define N 256  // Number of columns in B and C
 #define BLOCK_SIZE 32
 
-__global__ void Glo_Mem_Coalesced_MM(float *A, float *B, float *C, int m, int k, int n, float alpha, float beta)
+__global__ void GloMem_Coalesced_MM(float *A, float *B, float *C, int m, int k, int n, float alpha, float beta)
 {
     const int row = blockIdx.x * BLOCK_SIZE + (threadIdx.x / BLOCK_SIZE); //map 1D thread index to a 2D coordinate space
     const int column = blockIdx.y * BLOCK_SIZE + (threadIdx.x % BLOCK_SIZE);
@@ -65,12 +66,12 @@ int main()
     cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice);
 
     // Kernel launch configuration
-    dim3 gridDim((M + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
-    dim3 blockDim(BLOCK_SIZE * BLOCK_SIZE);
+    dim3 gridDim(CEIL_DIV(M, BLOCK_SIZE), CEIL_DIV(N, BLOCK_SIZE), 1);
+    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
 
     printf("Performing warm-up runs...\n");
     for (int i = 0; i < 3; i++) {
-        Glo_Mem_Coalesced_MM<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N, alpha, beta);
+        GloMem_Coalesced_MM<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
     }
 
@@ -78,7 +79,7 @@ int main()
     double gpu_total_time = 0.0;
     for (int i = 0; i < 20; i++) {
         double start_time = get_time();
-        Glo_Mem_Coalesced_MM<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N, alpha, beta);
+        GloMem_Coalesced_MM<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         double end_time = get_time();
         gpu_total_time += end_time - start_time;
